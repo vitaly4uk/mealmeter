@@ -163,3 +163,4 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8080
 - Add meal tracking endpoints
 - Set up automated testing
 - Configure environment-specific settings
+# Test auto-deploy
