@@ -379,3 +379,4 @@ terraform state list
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS App Runner Documentation](https://docs.aws.amazon.com/apprunner/)
 - [AWS ECR Documentation](https://docs.aws.amazon.com/ecr/)
+# Test auto-deploy
