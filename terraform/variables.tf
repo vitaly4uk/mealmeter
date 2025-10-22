@@ -25,3 +25,18 @@ variable "ecr_repository_name" {
   type        = string
   default     = "kbju-app"
 }
+
+# GitHub owner (username or organization)
+variable "github_owner" {
+  description = "GitHub owner (username or organization)"
+  type        = string
+  default     = "vitaly4uk"
+}
+
+# GitHub repository name
+variable "github_repository" {
+  description = "GitHub repository name"
+  type        = string
+  default     = "mealmeter"
+}
+

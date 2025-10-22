@@ -27,3 +27,27 @@ output "ecr_repository_arn" {
   description = "ARN of the ECR repository"
   value       = aws_ecr_repository.app.arn
 }
+
+# GitHub Actions IAM user
+output "github_actions_iam_user" {
+  description = "IAM user name for GitHub Actions"
+  value       = aws_iam_user.github_actions.name
+}
+
+# GitHub Actions IAM user ARN
+output "github_actions_iam_user_arn" {
+  description = "ARN of the IAM user for GitHub Actions"
+  value       = aws_iam_user.github_actions.arn
+}
+
+# GitHub repository full name
+output "github_repository_full_name" {
+  description = "Full name of the GitHub repository"
+  value       = github_repository.app.full_name
+}
+
+# GitHub repository URL
+output "github_repository_url" {
+  description = "URL of the GitHub repository"
+  value       = github_repository.app.html_url
+}

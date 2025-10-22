@@ -1,0 +1,13 @@
+# AWS Configuration
+aws_region          = "us-east-1"
+environment         = "production"
+app_name            = "kbju-api"
+ecr_repository_name = "kbju-app"
+
+# GitHub Configuration
+github_owner      = "vitaly4uk"
+github_repository = "mealmeter"
+
+# Note: AWS credentials are NOT needed in tfvars!
+# Terraform will automatically create a dedicated IAM user
+# with minimal permissions for GitHub Actions

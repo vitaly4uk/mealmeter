@@ -1,15 +1,21 @@
 # Terraform Infrastructure for KBJU API
 
-This directory contains Terraform configuration for deploying the KBJU API to AWS App Runner.
+This directory contains Terraform configuration for deploying the KBJU API to AWS App Runner and configuring GitHub repository with Actions secrets.
 
 ## Architecture
 
 The infrastructure includes:
 
+**AWS Resources:**
 - **ECR Repository**: Stores Docker images for the application
 - **App Runner Service**: Runs the containerized FastAPI application
 - **IAM Role**: Allows App Runner to pull images from ECR
 - **Health Checks**: Monitors application health via `/health` endpoint
+
+**GitHub Resources:**
+- **Repository Configuration**: Manages repository settings and topics
+- **Actions Secrets**: AWS credentials for CI/CD pipeline
+- **Actions Variables**: AWS region and resource names
 
 ## Prerequisites
 
@@ -18,20 +24,62 @@ The infrastructure includes:
    ```bash
    aws configure
    ```
-3. **Docker Image**: Build and push to ECR (done via GitHub Actions or manually)
+3. **GitHub Token**: Create a personal access token with `repo` and `admin:repo_hook` scopes
+   - Go to: https://github.com/settings/tokens/new
+   - Select scopes: `repo`, `admin:repo_hook`, `delete_repo`
+   - Generate token and save it securely
+4. **Environment Variables**: Set GitHub token
+   ```bash
+   export GITHUB_TOKEN="your_github_token_here"
+   ```
 
 ## Quick Start
 
-### 1. Initialize Terraform
+### 1. Configure Terraform Variables
 
 ```bash
 cd terraform
+
+# Copy the example file
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your values
+nano terraform.tfvars
+```
+
+Configure your variables in `terraform.tfvars`:
+```hcl
+# AWS Configuration
+aws_region          = "us-east-1"
+environment         = "production"
+app_name            = "kbju-api"
+ecr_repository_name = "kbju-app"
+
+# GitHub Configuration
+github_owner      = "vitaly4uk"
+github_repository = "mealmeter"
+
+# Note: NO AWS credentials needed!
+# Terraform automatically creates a dedicated IAM user
+# with minimal permissions for GitHub Actions
+```
+
+### 2. Set GitHub Token
+
+```bash
+# Export GitHub personal access token
+export GITHUB_TOKEN="ghp_YourGitHubTokenHere"
+```
+
+### 3. Initialize Terraform
+
+```bash
 terraform init
 ```
 
-This downloads the AWS provider and initializes the backend.
+This downloads the AWS and GitHub providers and initializes the backend.
 
-### 2. Review the Plan
+### 4. Review the Plan
 
 ```bash
 terraform plan
@@ -39,7 +87,7 @@ terraform plan
 
 This shows what resources will be created without making any changes.
 
-### 3. Apply the Configuration
+### 5. Apply the Configuration
 
 ```bash
 terraform apply
@@ -47,7 +95,22 @@ terraform apply
 
 Type `yes` when prompted to create the resources.
 
-### 4. Get Outputs
+**What will be created:**
+
+**AWS Resources:**
+- ECR repository for Docker images
+- App Runner service (0.25 vCPU, 512 MB)
+- IAM role for App Runner (ECR access)
+- **IAM user for GitHub Actions** (with minimal ECR push permissions)
+- IAM policy for GitHub Actions (scoped to ECR only)
+- Access keys for GitHub Actions IAM user
+
+**GitHub Resources:**
+- Repository configuration and settings
+- Actions secrets (IAM user credentials - auto-generated)
+- Actions variables (AWS region, ECR repo, service name)
+
+### 6. Get Outputs
 
 After successful deployment, get important values:
 
@@ -87,6 +150,59 @@ terraform apply -var="environment=staging" -var="aws_region=us-west-2"
 | `environment` | Environment name | `production` |
 | `app_name` | Application name | `kbju-api` |
 | `ecr_repository_name` | ECR repository name | `kbju-app` |
+| `github_owner` | GitHub username/org | `vitaly4uk` |
+| `github_repository` | GitHub repository name | `mealmeter` |
+
+### Security & IAM Configuration
+
+**Terraform automatically creates a dedicated IAM user for GitHub Actions with minimal permissions:**
+
+```json
+{
+  "Permissions": [
+    "ecr:GetAuthorizationToken" (global),
+    "ecr:BatchCheckLayerAvailability" (scoped to your ECR repo),
+    "ecr:GetDownloadUrlForLayer" (scoped to your ECR repo),
+    "ecr:BatchGetImage" (scoped to your ECR repo),
+    "ecr:PutImage" (scoped to your ECR repo),
+    "ecr:InitiateLayerUpload" (scoped to your ECR repo),
+    "ecr:UploadLayerPart" (scoped to your ECR repo),
+    "ecr:CompleteLayerUpload" (scoped to your ECR repo)
+  ]
+}
+```
+
+**Benefits:**
+- ✅ No need to manage AWS credentials manually
+- ✅ Minimal permissions (least privilege principle)
+- ✅ Scoped to specific ECR repository only
+- ✅ Separate from your personal AWS credentials
+- ✅ Easy to rotate or revoke if needed
+
+### GitHub Configuration
+
+The Terraform configuration will automatically:
+
+1. **Create IAM User for GitHub Actions:**
+   - Name: `kbju-api-github-actions`
+   - Policy: Minimal ECR push permissions only
+   - Access keys: Auto-generated
+
+2. **Configure Repository Settings:**
+   - Set repository description and topics
+   - Enable vulnerability alerts
+   - Configure merge strategies
+
+3. **Create GitHub Actions Secrets:**
+   - `AWS_ACCESS_KEY_ID`: From IAM user
+   - `AWS_SECRET_ACCESS_KEY`: From IAM user
+
+4. **Create GitHub Actions Variables:**
+   - `AWS_REGION`: AWS region
+   - `ECR_REPOSITORY`: ECR repository name
+   - `APP_RUNNER_SERVICE`: App Runner service name
+
+After Terraform apply, your GitHub Actions workflow will be fully configured and ready to deploy automatically!
 
 ## First Deployment
 
