@@ -51,3 +51,15 @@ output "github_repository_url" {
   description = "URL of the GitHub repository"
   value       = github_repository.app.html_url
 }
+
+# DynamoDB table name
+output "dynamodb_table_name" {
+  description = "Name of the DynamoDB table for meal data"
+  value       = aws_dynamodb_table.kbju_meals.name
+}
+
+# DynamoDB table ARN
+output "dynamodb_table_arn" {
+  description = "ARN of the DynamoDB table"
+  value       = aws_dynamodb_table.kbju_meals.arn
+}

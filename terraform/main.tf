@@ -87,6 +87,48 @@ resource "aws_iam_role_policy_attachment" "apprunner_ecr_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
 }
 
+# IAM Role for App Runner instance (for DynamoDB access)
+resource "aws_iam_role" "apprunner_instance_role" {
+  name = "${var.app_name}-apprunner-instance-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "tasks.apprunner.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-apprunner-instance-role"
+    Environment = var.environment
+  }
+}
+
+# IAM Policy for DynamoDB access
+resource "aws_iam_role_policy" "apprunner_dynamodb_access" {
+  name = "${var.app_name}-dynamodb-access"
+  role = aws_iam_role.apprunner_instance_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "DynamoDBAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ]
+      Resource = aws_dynamodb_table.kbju_meals.arn
+    }]
+  })
+}
+
 # App Runner Service
 resource "aws_apprunner_service" "app" {
   service_name = var.app_name
@@ -104,7 +146,9 @@ resource "aws_apprunner_service" "app" {
         port = "8000"
 
         runtime_environment_variables = {
-          ENVIRONMENT = var.environment
+          ENVIRONMENT      = var.environment
+          AWS_REGION       = var.aws_region
+          DYNAMODB_TABLE   = aws_dynamodb_table.kbju_meals.name
         }
       }
     }
@@ -122,8 +166,9 @@ resource "aws_apprunner_service" "app" {
   }
 
   instance_configuration {
-    cpu    = "0.25 vCPU"
-    memory = "0.5 GB"
+    cpu               = "0.25 vCPU"
+    memory            = "0.5 GB"
+    instance_role_arn = aws_iam_role.apprunner_instance_role.arn
   }
 
   tags = {
