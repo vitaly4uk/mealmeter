@@ -1,0 +1,78 @@
+name: Deploy Backend to AWS App Runner
+
+# Trigger workflow on push to main branch with backend changes
+# or manual trigger via workflow_dispatch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+# Environment variables used across all jobs
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: kbju-app
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Configure AWS credentials from GitHub secrets
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Step 3: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Step 4: Build Docker image
+      - name: Build Docker image
+        working-directory: ./backend
+        run: |
+          docker build -t ${{ env.ECR_REPOSITORY }} .
+
+      # Step 5: Tag Docker image with git SHA and latest
+      - name: Tag Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Tag with git commit SHA
+          docker tag ${{ env.ECR_REPOSITORY }}:latest ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+          # Tag with latest
+          docker tag ${{ env.ECR_REPOSITORY }}:latest ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      # Step 6: Push Docker image to ECR
+      - name: Push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Push both tags
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      # Step 7: Output success message
+      - name: Deployment summary
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "✅ Docker image successfully pushed to ECR"
+          echo "📦 Image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"
+          echo "🚀 App Runner will automatically deploy the new image"
+          echo "⏱️ Deployment typically takes 2-5 minutes"
