@@ -63,3 +63,27 @@ output "dynamodb_table_arn" {
   description = "ARN of the DynamoDB table"
   value       = aws_dynamodb_table.kbju_meals.arn
 }
+
+# Frontend CloudFront URL
+output "frontend_cloudfront_url" {
+  description = "CloudFront distribution URL for frontend"
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
+# Frontend CloudFront distribution ID
+output "frontend_cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for frontend"
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
+# Frontend S3 bucket name
+output "frontend_s3_bucket_name" {
+  description = "S3 bucket name for frontend"
+  value       = aws_s3_bucket.frontend.id
+}
+
+# Frontend S3 website endpoint
+output "frontend_s3_website_endpoint" {
+  description = "S3 website endpoint for frontend"
+  value       = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
+}

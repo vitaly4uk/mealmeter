@@ -220,6 +220,31 @@ resource "aws_iam_user_policy" "github_actions" {
           "ecr:CompleteLayerUpload"
         ]
         Resource = aws_ecr_repository.app.arn
+      },
+      {
+        Sid    = "S3FrontendAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:PutObjectAcl"
+        ]
+        Resource = [
+          aws_s3_bucket.frontend.arn,
+          "${aws_s3_bucket.frontend.arn}/*"
+        ]
+      },
+      {
+        Sid    = "CloudFrontInvalidation"
+        Effect = "Allow"
+        Action = [
+          "cloudfront:CreateInvalidation",
+          "cloudfront:GetInvalidation",
+          "cloudfront:ListInvalidations"
+        ]
+        Resource = aws_cloudfront_distribution.frontend.arn
       }
     ]
   })
@@ -292,4 +317,25 @@ resource "github_actions_variable" "app_runner_service" {
   repository    = github_repository.app.name
   variable_name = "APP_RUNNER_SERVICE"
   value         = var.app_name
+}
+
+# GitHub Actions Secret: API URL (from App Runner)
+resource "github_actions_secret" "api_url" {
+  repository      = github_repository.app.name
+  secret_name     = "API_URL"
+  plaintext_value = "https://${aws_apprunner_service.app.service_url}"
+}
+
+# GitHub Actions Secret: CloudFront Distribution ID
+resource "github_actions_secret" "cloudfront_distribution_id" {
+  repository      = github_repository.app.name
+  secret_name     = "CLOUDFRONT_DISTRIBUTION_ID"
+  plaintext_value = aws_cloudfront_distribution.frontend.id
+}
+
+# GitHub Actions Variable: S3 Bucket Name
+resource "github_actions_variable" "s3_bucket_name" {
+  repository    = github_repository.app.name
+  variable_name = "S3_BUCKET_NAME"
+  value         = aws_s3_bucket.frontend.id
 }

@@ -1,0 +1,100 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '20'
+
+jobs:
+  deploy:
+    name: Build and Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ secrets.API_URL }}
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set S3 bucket name
+        id: get-bucket
+        run: |
+          echo "bucket_name=${{ vars.S3_BUCKET_NAME }}" >> $GITHUB_OUTPUT
+
+      - name: Sync files to S3
+        working-directory: frontend/dist
+        run: |
+          # Sync all files first
+          aws s3 sync . s3://${{ steps.get-bucket.outputs.bucket_name }}/ --delete
+
+          # Set cache-control for HTML files (no cache)
+          aws s3 cp . s3://${{ steps.get-bucket.outputs.bucket_name }}/ \
+            --recursive \
+            --exclude "*" \
+            --include "*.html" \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --metadata-directive REPLACE
+
+          # Set cache-control for assets (1 year cache)
+          aws s3 cp . s3://${{ steps.get-bucket.outputs.bucket_name }}/ \
+            --recursive \
+            --exclude "*" \
+            --include "assets/*" \
+            --cache-control "max-age=31536000, immutable" \
+            --metadata-directive REPLACE
+
+      - name: Set CloudFront distribution ID
+        id: get-distribution
+        run: |
+          echo "distribution_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-distribution.outputs.distribution_id }} \
+            --paths "/*"
+
+      - name: Deployment summary
+        run: |
+          echo "## 🚀 Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Status**: Deployment successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 **S3 Bucket**: \`${{ steps.get-bucket.outputs.bucket_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "☁️ **CloudFront Distribution**: \`${{ steps.get-distribution.outputs.distribution_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **API URL**: ${{ secrets.API_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⏱️ **Note**: CloudFront invalidation takes 1-2 minutes to propagate" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "💡 **CloudFront URL**: Check AWS Console or run \`aws cloudfront get-distribution --id ${{ steps.get-distribution.outputs.distribution_id }}\`" >> $GITHUB_STEP_SUMMARY

@@ -11,14 +11,21 @@ mealmeter/
 │   ├── Dockerfile       # Container configuration
 │   ├── pyproject.toml   # Python dependencies
 │   └── README.md        # Backend documentation
-├── terraform/           # AWS infrastructure
-│   ├── main.tf         # Resource definitions
-│   ├── variables.tf    # Configuration variables
-│   ├── outputs.tf      # Output values
-│   └── README.md       # Infrastructure documentation
+├── frontend/            # Vite + Vanilla JS frontend
+│   ├── src/            # Application source
+│   ├── index.html      # Main HTML file
+│   ├── package.json    # Dependencies
+│   └── README.md       # Frontend documentation
+├── terraform/          # AWS infrastructure
+│   ├── main.tf        # App Runner & DynamoDB
+│   ├── s3_cloudfront.tf  # S3 + CloudFront for frontend
+│   ├── variables.tf   # Configuration variables
+│   ├── outputs.tf     # Output values
+│   └── README.md      # Infrastructure documentation
 └── .github/
     └── workflows/
-        └── deploy-backend.yml  # CI/CD pipeline
+        ├── deploy-backend.yml   # Backend CI/CD
+        └── deploy-frontend.yml  # Frontend CI/CD
 ```
 
 ## Quick Start
@@ -38,8 +45,16 @@ uv run uvicorn app.main:app --reload
 ```
 
 Visit:
-- API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs
+- Backend API: http://localhost:8000
+- Interactive API docs: http://localhost:8000/docs
+- Frontend: http://localhost:3000
+
+For frontend development:
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ### 2. Deploy Infrastructure
 
@@ -84,30 +99,30 @@ docker push $(cd ../terraform && terraform output -raw ecr_repository_url):lates
    git push -u origin main
    ```
 
-2. **Configure GitHub Secrets**
+2. **GitHub Secrets (Automatically Managed by Terraform)**
 
-   Go to your repository → Settings → Secrets and variables → Actions
+   **No manual setup needed!** Terraform automatically configures all GitHub Actions secrets and variables:
 
-   Add the following secrets:
+   **Automatically set secrets:**
+   - `AWS_ACCESS_KEY_ID` - IAM user for GitHub Actions
+   - `AWS_SECRET_ACCESS_KEY` - IAM user secret key
+   - `API_URL` - Backend API URL (from App Runner)
+   - `CLOUDFRONT_DISTRIBUTION_ID` - CloudFront distribution ID
 
-   | Secret Name | Description | How to Get |
-   |-------------|-------------|------------|
-   | `AWS_ACCESS_KEY_ID` | AWS access key | `aws configure get aws_access_key_id` |
-   | `AWS_SECRET_ACCESS_KEY` | AWS secret key | `aws configure get aws_secret_access_key` |
+   **Automatically set variables:**
+   - `AWS_REGION` - us-east-1
+   - `ECR_REPOSITORY` - ECR repository name
+   - `APP_RUNNER_SERVICE` - App Runner service name
+   - `S3_BUCKET_NAME` - S3 bucket for frontend
 
-   **Creating AWS IAM User for GitHub Actions:**
+   ℹ️ **Prerequisites:**
    ```bash
-   # Create IAM user
-   aws iam create-user --user-name github-actions-mealmeter
-
-   # Attach ECR and App Runner policies
-   aws iam attach-user-policy \
-     --user-name github-actions-mealmeter \
-     --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
-
-   # Create access key
-   aws iam create-access-key --user-name github-actions-mealmeter
+   # Set GitHub token before terraform apply
+   export GITHUB_TOKEN="your_github_personal_access_token"
    ```
+
+   Create token at: GitHub → Settings → Developer settings → Personal access tokens
+   Required scopes: `repo`, `admin:repo_hook`
 
 ### How It Works
 
@@ -152,12 +167,28 @@ aws apprunner list-operations \
 aws logs tail /aws/apprunner/kbju-api/service --follow --region us-east-1
 ```
 
+## Frontend
+
+**Live URL**: Check CloudFront distribution URL after deployment
+
+**Local Development**:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+See [Frontend Documentation](frontend/README.md) for details.
+
 ## API Endpoints
 
 - `GET /` - API information
 - `GET /health` - Health check endpoint
 - `GET /docs` - Interactive API documentation (Swagger UI)
 - `GET /redoc` - Alternative API documentation (ReDoc)
+- `POST /api/meals` - Create a new meal
+- `GET /api/meals/{user_id}` - List user meals
+- `GET /api/stats/{user_id}/today` - Get today's stats
 
 ## Environment Variables
 
@@ -185,34 +216,42 @@ Add to `.github/workflows/deploy-backend.yml` in the image configuration step.
 
 ## Cost Estimation
 
-Approximate monthly costs (us-east-1):
+Approximate monthly costs (us-east-1) for low traffic:
 
 | Service | Configuration | Cost |
 |---------|--------------|------|
 | App Runner | 0.25 vCPU, 0.5 GB | ~$5-10 |
 | ECR Storage | <1 GB (10 images) | ~$0.10 |
+| DynamoDB | On-demand, light usage | ~$0.25 |
+| S3 + CloudFront | Free tier eligible | ~$0-1 |
 | Data Transfer | Light usage | ~$1 |
-| **Total** | | **~$6-11/month** |
+| **Total** | | **~$6-12/month** |
+
+**Free Tier**: S3 and CloudFront are mostly free for first 12 months and light traffic.
 
 ## Architecture
 
 ```
-┌─────────────┐
-│   GitHub    │
-│   Actions   │
-└──────┬──────┘
-       │ Push Docker Image
-       ▼
-┌─────────────┐      ┌──────────────┐
-│     ECR     │─────▶│  App Runner  │
-│ Repository  │      │   Service    │
-└─────────────┘      └──────┬───────┘
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │   FastAPI    │
-                     │ Application  │
-                     └──────────────┘
+┌─────────────────────────────────────────────────┐
+│                 User Browser                     │
+└───────┬─────────────────────────┬───────────────┘
+        │                         │
+        │ Static Files            │ API Calls
+        ▼                         ▼
+┌──────────────┐          ┌──────────────┐
+│  CloudFront  │          │  App Runner  │
+│     (CDN)    │          │   (Backend)  │
+└──────┬───────┘          └──────┬───────┘
+       │                         │
+       ▼                         ▼
+┌──────────────┐          ┌──────────────┐
+│  S3 Bucket   │          │   DynamoDB   │
+│  (Frontend)  │          │  (Database)  │
+└──────────────┘          └──────────────┘
+
+GitHub Actions CI/CD:
+- Backend → ECR → App Runner (auto-deploy)
+- Frontend → Build → S3 → CloudFront invalidation
 ```
 
 ## Development Workflow
@@ -305,16 +344,19 @@ aws logs tail /aws/apprunner/kbju-api/service --follow --region us-east-1
 ## Documentation
 
 - [Backend Documentation](backend/README.md) - FastAPI application details
+- [Frontend Documentation](frontend/README.md) - Vite + Vanilla JS frontend
 - [Infrastructure Documentation](terraform/README.md) - Terraform and AWS setup
-- [GitHub Actions Workflow](.github/workflows/deploy-backend.yml) - CI/CD pipeline
+- [Backend CI/CD](.github/workflows/deploy-backend.yml) - Backend deployment pipeline
+- [Frontend CI/CD](.github/workflows/deploy-frontend.yml) - Frontend deployment pipeline
 
 ## Technologies
 
-- **Backend**: FastAPI, Python 3.11+
-- **Package Manager**: uv (fast Python package installer)
-- **Container**: Docker
+- **Backend**: FastAPI, Python 3.11+, DynamoDB
+- **Frontend**: Vite, Vanilla JavaScript, Tailwind CSS
+- **Package Manager**: uv (Python), npm (JavaScript)
+- **Container**: Docker (backend only)
 - **Infrastructure**: Terraform
-- **Cloud**: AWS (App Runner, ECR)
+- **Cloud**: AWS (App Runner, ECR, DynamoDB, S3, CloudFront)
 - **CI/CD**: GitHub Actions
 
 ## Contributing

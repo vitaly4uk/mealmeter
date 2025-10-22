@@ -16,9 +16,11 @@ app = FastAPI(
 )
 
 # Configure CORS middleware
+# TODO: Restrict to CloudFront domain in production
+# For now, allow all origins for simplicity during development and testing
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["*"],  # Allow all origins (CloudFront URL will be added later)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
